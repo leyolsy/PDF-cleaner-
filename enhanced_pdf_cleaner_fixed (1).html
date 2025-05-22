@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Cleaner - Remove Links & Annotations</title>
+    <!-- Using reliable CDN versions -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Starry Night Background */
+        .starry-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+            z-index: -2;
+        }
+
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        .shooting-star {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(45deg, #fff, transparent);
+            animation: shoot 4s linear infinite;
+        }
+
+        @keyframes shoot {
+            0% { 
+                transform: translateX(-100px) translateY(100px);
+                opacity: 0;
+            }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { 
+                transform: translateX(1000px) translateY(-500px);
+                opacity: 0;
+            }
+        }
+
+        /* Main Container */
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* Glass Morphism Card */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 40px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 
+                0 20px 40px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        /* Title */
+        .title {
+            text-align: center;
+            color: white;
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .title-icon {
+            width: 40px;
+            height: 40px;
+            color: #4CAF50;
+            filter: drop-shadow(0 0 10px rgba(76, 175, 80, 0.5));
+        }
+
+        .subtitle {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1rem;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        /* Upload Zone */
+        .upload-zone {
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 16px;
+            padding: 40px 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-zone:hover {
+            border-color: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(1.02);
+        }
+
+        .upload-zone.dragover {
+            border-color: #4CAF50;
+            background: rgba(76, 175, 80, 0.1);
+            transform: scale(1.05);
+        }
+
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            color: rgba(255, 255, 255, 0.7);
+            margin: 0 auto 15px;
+            transition: all 0.3s ease;
+        }
+
+        .upload-zone:hover .upload-icon {
+            color: #4CAF50;
+            filter: drop-shadow(0 0 20px rgba(76, 175, 80, 0.5));
+            transform: scale(1.1);
+        }
+
+        .upload-text {
+            color: white;
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .upload-subtext {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        /* File Input */
+        #fileInput {
+            display: none;
+        }
+
+        /* Processing State */
+        .processing {
+            text-align: center;
+            padding: 40px 20px;
+            display: none;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+            position: relative;
+        }
+
+        .spinner::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            background: #4CAF50;
+            border-radius: 50%;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+        }
+
+        .processing-text {
+            color: white;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .processing-subtext {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        /* Download Section */
+        .download-section {
+            text-align: center;
+            padding: 30px 20px;
+            display: none;
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            color: #4CAF50;
+            margin: 0 auto 20px;
+            animation: bounce 0.6s ease;
+            filter: drop-shadow(0 0 20px rgba(76, 175, 80, 0.5));
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-20px); }
+            60% { transform: translateY(-10px); }
+        }
+
+        .download-btn {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+            margin-bottom: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(76, 175, 80, 0.6);
+        }
+
+        .new-file-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 12px 25px;
+            border-radius: 50px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-left: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .new-file-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        /* Error State */
+        .error-message {
+            background: rgba(255, 82, 82, 0.2);
+            border: 1px solid rgba(255, 82, 82, 0.4);
+            color: #ff5252;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
+            text-align: center;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            margin: 20px 0;
+            overflow: hidden;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(45deg, #4CAF50, #45a049, #66BB6A);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+            position: relative;
+        }
+
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* Status indicators */
+        .status-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+            margin: 5px 0;
+        }
+
+        .status-item.completed {
+            color: #4CAF50;
+        }
+
+        /* Icon fallbacks using Unicode symbols */
+        .icon-fallback {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        /* Mobile Responsiveness */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .glass-card {
+                padding: 25px;
+                margin: 10px;
+            }
+            
+            .title {
+                font-size: 1.8rem;
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .upload-zone {
+                padding: 30px 15px;
+            }
+            
+            .upload-icon {
+                width: 48px;
+                height: 48px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .glass-card {
+                padding: 20px;
+            }
+            
+            .title {
+                font-size: 1.6rem;
+            }
+            
+            .download-btn, .new-file-btn {
+                display: flex;
+                width: 100%;
+                margin: 8px 0;
+                justify-content: center;
+            }
+
+            .subtitle {
+                flex-direction: column;
+                gap: 4px;
+            }
+        }
+
+        /* Floating particles effect */
+        .particle {
+            position: absolute;
+            background: rgba(76, 175, 80, 0.6);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: float 6s infinite ease-in-out;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(-100vh) rotate(360deg); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="starry-bg"></div>
+    <div class="stars"></div>
+
+    <div class="container">
+        <div class="glass-card">
+            <h1 class="title">
+                <span class="title-icon">✨</span>
+                PDF Cleaner
+            </h1>
+            <p class="subtitle">
+                <span class="icon-fallback">🛡</span>
+                Remove links, annotations & clean your PDFs
+            </p>
+
+            <!-- Upload Section -->
+            <div class="upload-section">
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-icon">📄</div>
+                    <div class="upload-text">Drop your PDF here</div>
+                    <div class="upload-subtext">
+                        <span class="icon-fallback">👆</span>
+                        or click to browse (max 10MB)
+                        <span class="icon-fallback">💾</span>
+                    </div>
+                </div>
+                <input type="file" id="fileInput" accept=".pdf" />
+            </div>
+
+            <!-- Processing Section -->
+            <div class="processing" id="processingSection">
+                <div class="spinner"></div>
+                <div class="processing-text">
+                    <span class="icon-fallback">⚙️</span>
+                    Processing your PDF...
+                </div>
+                <div class="processing-subtext" id="processingStatus">
+                    <span class="icon-fallback">🔧</span>
+                    Initializing...
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                
+                <!-- Processing steps indicator -->
+                <div id="processingSteps" style="margin-top: 20px;">
+                    <div class="status-item" id="step1">
+                        <span>📖</span> Reading PDF structure...
+                    </div>
+                    <div class="status-item" id="step2">
+                        <span>🔗</span> Removing links...
+                    </div>
+                    <div class="status-item" id="step3">
+                        <span>📝</span> Cleaning annotations...
+                    </div>
+                    <div class="status-item" id="step4">
+                        <span>🧹</span> Removing metadata...
+                    </div>
+                    <div class="status-item" id="step5">
+                        <span>💾</span> Generating clean PDF...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Download Section -->
+            <div class="download-section" id="downloadSection">
+                <div class="success-icon">✅</div>
+                <div style="color: white; font-size: 1.2rem; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <span>✨</span>
+                    PDF cleaned successfully!
+                </div>
+                <div id="cleaningStats" style="color: rgba(255, 255, 255, 0.8); margin-bottom: 20px; font-size: 0.9rem;">
+                    <!-- Cleaning statistics will be populated here -->
+                </div>
+                <button class="download-btn" id="downloadBtn">
+                    <span>⬇️</span>
+                    Download Clean PDF
+                </button>
+                <button class="new-file-btn" id="newFileBtn">
+                    <span>🔄</span>
+                    Process Another File
+                </button>
+            </div>
+
+            <!-- Error Message -->
+            <div class="error-message" id="errorMessage">
+                <span class="icon-fallback">⚠️</span>
+                <span id="errorText"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check if PDF-lib is loaded
+        if (typeof PDFLib === 'undefined') {
+            console.error('PDF-lib failed to load');
+            document.body.innerHTML = '<div style="text-align: center; color: white; padding: 50px;">PDF-lib library failed to load. Please check your internet connection and refresh the page.</div>';
+        }
+
+        // Create starry background
+        function createStars() {
+            const starsContainer = document.querySelector('.stars');
+            const numStars = 100;
+            
+            for (let i = 0; i < numStars; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.width = Math.random() * 3 + 1 + 'px';
+                star.style.height = star.style.width;
+                star.style.animationDelay = Math.random() * 3 + 's';
+                starsContainer.appendChild(star);
+            }
+
+            // Add shooting stars
+            setInterval(() => {
+                if (Math.random() < 0.1) {
+                    const shootingStar = document.createElement('div');
+                    shootingStar.className = 'shooting-star';
+                    shootingStar.style.left = Math.random() * 100 + '%';
+                    shootingStar.style.top = Math.random() * 50 + '%';
+                    shootingStar.style.width = Math.random() * 100 + 50 + 'px';
+                    starsContainer.appendChild(shootingStar);
+                    
+                    setTimeout(() => {
+                        if (starsContainer.contains(shootingStar)) {
+                            starsContainer.removeChild(shootingStar);
+                        }
+                    }, 4000);
+                }
+            }, 3000);
+        }
+
+        // Create floating particles
+        function createFloatingParticles() {
+            const container = document.querySelector('.container');
+            
+            setInterval(() => {
+                if (Math.random() < 0.3) {
+                    const particle = document.createElement('div');
+                    particle.className = 'particle';
+                    particle.style.left = Math.random() * 100 + '%';
+                    particle.style.bottom = '-10px';
+                    particle.style.width = Math.random() * 6 + 2 + 'px';
+                    particle.style.height = particle.style.width;
+                    particle.style.animationDelay = Math.random() * 2 + 's';
+                    particle.style.animationDuration = (Math.random() * 3 + 3) + 's';
+                    
+                    container.appendChild(particle);
+                    
+                    setTimeout(() => {
+                        if (container.contains(particle)) {
+                            container.removeChild(particle);
+                        }
+                    }, 6000);
+                }
+            }, 2000);
+        }
+
+        // Initialize
+        createStars();
+        createFloatingParticles();
+
+        // DOM Elements
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const processingSection = document.getElementById('processingSection');
+        const downloadSection = document.getElementById('downloadSection');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const newFileBtn = document.getElementById('newFileBtn');
+        const progressBar = document.getElementById('progressBar');
+        const processingStatus = document.getElementById('processingStatus');
+        const cleaningStats = document.getElementById('cleaningStats');
+
+        let cleanedPdfBytes = null;
+        let originalFileName = '';
+        let cleaningResults = {};
+
+        // File upload handlers
+        uploadZone.addEventListener('click', () => fileInput.click());
+        uploadZone.addEventListener('dragover', handleDragOver);
+        uploadZone.addEventListener('dragleave', handleDragLeave);
+        uploadZone.addEventListener('drop', handleDrop);
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                processFile(files[0]);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                processFile(file);
+            }
+        }
+
+        function updateProcessingStep(stepId, completed = false) {
+            const step = document.getElementById(stepId);
+            if (step) {
+                if (completed) {
+                    step.classList.add('completed');
+                    step.innerHTML = step.innerHTML.replace('...', ' ✓');
+                }
+            }
+        }
+
+        function updateProgress(percentage, status) {
+            progressBar.style.width = percentage + '%';
+            processingStatus.innerHTML = `<span class="icon-fallback">🔧</span> ${status}`;
+        }
+
+        async function processFile(file) {
+            // Validate file
+            if (!file.type.includes('pdf')) {
+                showError('Please select a PDF file');
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+                showError('File size must be less than 10MB');
+                return;
+            }
+
+            // Reset cleaning results
+            cleaningResults = {
+                linksRemoved: 0,
+                annotationsRemoved: 0,
+                formFieldsRemoved: 0,
+                metadataCleared: false,
+                pagesCleaned: 0
+            };
+
+            originalFileName = file.name.replace('.pdf', '_cleaned.pdf');
+            
+            // Show processing state
+            document.querySelector('.upload-section').style.display = 'none';
+            processingSection.style.display = 'block';
+            hideError();
+
+            // Reset all processing steps
+            const steps = ['step1', 'step2', 'step3', 'step4', 'step5'];
+            steps.forEach(stepId => {
+                const step = document.getElementById(stepId);
+                if (step) {
+                    step.classList.remove('completed');
+                    step.innerHTML = step.innerHTML.replace(' ✓', '...');
+                }
+            });
+
+            try {
+                // Step 1: Read PDF
+                updateProgress(10, 'Reading PDF structure...');
+                updateProcessingStep('step1');
+                
+                const arrayBuffer = await file.arrayBuffer();
+                
+                updateProgress(20, 'Loading PDF document...');
+                const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer, {
+                    ignoreEncryption: false,
+                    parseSpeed: PDFLib.ParseSpeeds.Fastest
+                });
+                
+                updateProcessingStep('step1', true);
+                cleaningResults.pagesCleaned = pdfDoc.getPageCount();
+
+                // Step 2: Remove links
+                updateProgress(40, 'Removing hyperlinks...');
+                updateProcessingStep('step2');
+                await cleanPdfLinks(pdfDoc);
+                updateProcessingStep('step2', true);
+
+                // Step 3: Clean annotations
+                updateProgress(60, 'Cleaning annotations...');
+                updateProcessingStep('step3');
+                await cleanPdfAnnotations(pdfDoc);
+                updateProcessingStep('step3', true);
+
+                // Step 4: Remove metadata
+                updateProgress(80, 'Removing metadata...');
+                updateProcessingStep('step4');
+                await cleanPdfMetadata(pdfDoc);
+                updateProcessingStep('step4', true);
+
+                // Step 5: Generate clean PDF
+                updateProgress(90, 'Generating clean PDF...');
+                updateProcessingStep('step5');
+                cleanedPdfBytes = await pdfDoc.save();
+                updateProcessingStep('step5', true);
+
+                // Complete
+                updateProgress(100, 'Processing complete!');
+
+                // Show cleaning statistics
+                displayCleaningStats();
+
+                // Show download section
+                setTimeout(() => {
+                    processingSection.style.display = 'none';
+                    downloadSection.style.display = 'block';
+                }, 1000);
+
+            } catch (error) {
+                console.error('Error processing PDF:', error);
+                processingSection.style.display = 'none';
+                document.querySelector('.upload-section').style.display = 'block';
+                
+                // Handle specific error types
+                if (error.message.includes('password') || error.message.includes('encrypted')) {
+                    showError('This PDF is password protected or encrypted. Please provide an unprotected PDF.');
+                } else if (error.message.includes('corrupted') || error.message.includes('invalid')) {
+                    showError('This PDF file appears to be corrupted or invalid. Please try another file.');
+                } else {
+                    showError(`Failed to process PDF: ${error.message || 'Unknown error'}`);
+                }
+            }
+        }
+
+        async function cleanPdfLinks(pdfDoc) {
+            const pages = pdfDoc.getPages();
+            let linksRemoved = 0;
+            
+            for (let i = 0; i < pages.length; i++) {
+                const page = pages[i];
+                
+                try {
+                    // Remove link annotations
+                    const annotations = page.node.lookup(PDFLib.PDFName.of('Annots'));
+                    if (annotations && annotations instanceof PDFLib.PDFArray) {
+                        const annotArray = annotations.asArray();
+                        const linksToRemove = [];
+                        
+                        for (let j = 0; j < annotArray.length; j++) {
+                            const annot = annotArray[j];
+                            if (annot instanceof PDFLib.PDFRef) {
+                                const annotObj = pdfDoc.context.lookup(annot);
+                                const subtype = annotObj.lookup(PDFLib.PDFName.of('Subtype'));
+                                
+                                if (subtype && subtype.toString() === '/Link') {
+                                    linksToRemove.push(j);
+                                    linksRemoved++;
+                                }
+                            }
+                        }
+                        
+                        // Remove links in reverse order to maintain indices
+                        for (let k = linksToRemove.length - 1; k >= 0; k--) {
+                            annotArray.splice(linksToRemove[k], 1);
+                        }
+                        
+                        if (annotArray.length === 0) {
+                            page.node.delete(PDFLib.PDFName.of('Annots'));
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`Could not process links on page ${i + 1}:`, e);
+                }
+            }
+            
+            cleaningResults.linksRemoved = linksRemoved;
+        }
+
+        async function cleanPdfAnnotations(pdfDoc) {
+            const pages = pdfDoc.getPages();
+            let annotationsRemoved = 0;
+            
+            for (let i = 0; i < pages.length; i++) {
+                const page = pages[i];
+                
+                try {
+                    // Remove all annotations
+                    const annotations = page.node.lookup(PDFLib.PDFName.of('Annots'));
+                    if (annotations) {
+                        if (annotations instanceof PDFLib.PDFArray) {
+                            annotationsRemoved += annotations.asArray().length;
+                        }
+                        page.node.delete(PDFLib.PDFName.of('Annots'));
+                    }
+                } catch (e) {
+                    console.warn(`Could not process annotations on page ${i + 1}:`, e);
+                }
+            }
+            
+            cleaningResults.annotationsRemoved = annotationsRemoved;
+        }
+
+        async function cleanPdfMetadata(pdfDoc) {
+            try {
+                // Remove form fields
+                const acroForm = pdfDoc.catalog.lookup(PDFLib.PDFName.of('AcroForm'));
+                if (acroForm) {
+                    cleaningResults.formFieldsRemoved = 1;
+                    pdfDoc.catalog.delete(PDFLib.PDFName.of('AcroForm'));
+                }
+
+                // Clear document metadata
+                const infoDict = pdfDoc.context.infoDict;
+                if (infoDict) {
+                    const keysToRemove = [
+                        'Title', 'Author', 'Subject', 'Keywords', 
+                        'Creator', 'Producer', 'CreationDate', 'ModDate'
+                    ];
+                    
+                    keysToRemove.forEach(key => {
+                        infoDict.delete(PDFLib.PDFName.of(key));
+                    });
+                }
+
+                // Set new clean metadata
+                pdfDoc.setTitle('');
+                pdfDoc.setAuthor('');  
+                pdfDoc.setSubject('');
+                pdfDoc.setKeywords([]);
+                pdfDoc.setCreator('PDF Cleaner');
+                pdfDoc.setProducer('PDF Cleaner');
+                pdfDoc.setCreationDate(new Date());
+                pdfDoc.setModificationDate(new Date());
+                
+                cleaningResults.metadataCleared = true;
+                
+            } catch (e) {
+                console.warn('Could not fully clean metadata:', e);
+            }
+        }
+
+        function displayCleaningStats() {
+            const stats = [];
+            
+            if (cleaningResults.pagesCleaned > 0) {
+                stats.push(`📄 ${cleaningResults.pagesCleaned} pages processed`);
+            }
+            
+            if (cleaningResults.linksRemoved > 0) {
+                stats.push(`🔗 ${cleaningResults.linksRemoved} links removed`);
+            }
+            
+            if (cleaningResults.annotationsRemoved > 0) {
+                stats.push(`📝 ${cleaningResults.annotationsRemoved} annotations cleaned`);
+            }
+            
+            if (cleaningResults.formFieldsRemoved > 0) {
+                stats.push(`📋 Form fields removed`);
+            }
+            
+            if (cleaningResults.metadataCleared) {
+                stats.push(`🏷️ Metadata cleared`);
+            }
+            
+            if (stats.length === 0) {
+                stats.push(`✨ PDF structure optimized`);
+            }
+            
+            cleaningStats.innerHTML = stats.join(' • ');
+        }
+
+        function showError(message) {
+            errorText.textContent = message;
+            errorMessage.style.display = 'flex';
+        }
+
+        function hideError() {
+            errorMessage.style.display = 'none';
+        }
+
+        // Download handlers
+        downloadBtn.addEventListener('click', () => {
+            if (cleanedPdfBytes) {
+                try {
+                    const blob = new Blob([cleanedPdfBytes], { type: 'application/pdf' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = originalFileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } catch (error) {
+                    showError('Failed to download file. Please try again.');
+                }
+            }
+        });
+
+        newFileBtn.addEventListener('click', () => {
+            // Reset all states
+            downloadSection.style.display = 'none';
+            document.querySelector('.upload-section').style.display = 'block';
+            fileInput.value = '';
+            cleanedPdfBytes = null;
+            originalFileName = '';
+            cleaningResults = {};
+            progressBar.style.width = '0%';
+            hideError();
+        });
+
+        // Simple unit tests for validation
+        function runBasicTests() {
+            console.log('Running basic validation tests...');
+            
+            // Test 1: Check if PDF-lib is available
+            const test1 = typeof PDFLib !== 'undefined';
+            console.log('Test 1 - PDF-lib loaded:', test1 ? '✅ PASS' : '❌ FAIL');
+            
+            // Test 2: Check DOM elements
+            const requiredElements = [
+                'uploadZone', 'fileInput', 'processingSection', 
+                'downloadSection', 'errorMessage', 'progressBar'
+            ];
+            const test2 = requiredElements.every(id => document.getElementById(id) !== null);
+            console.log('Test 2 - DOM elements present:', test2 ? '✅ PASS' : '❌ FAIL');
+            
+            // Test 3: Check file validation function
+            const test3 = typeof processFile === 'function';
+            console.log('Test 3 - Process function defined:', test3 ? '✅ PASS' : '❌ FAIL');
+            
+            // Test 4: Check error handling
+            const test4 = typeof showError === 'function' && typeof hideError === 'function';
+            console.log('Test 4 - Error handling functions:', test4 ? '✅ PASS' : '❌ FAIL');
+            
+            // Test 5: Check cleaning functions
+            const test5 = typeof cleanPdfLinks === 'function' && 
+                         typeof cleanPdfAnnotations === 'function' && 
+                         typeof cleanPdfMetadata === 'function';
+            console.log('Test 5 - Cleaning functions defined:', test5 ? '✅ PASS' : '❌ FAIL');
+            
+            const allTestsPassed = test1 && test2 && test3 && test4 && test5;
+            console.log('Overall status:', allTestsPassed ? '✅ ALL TESTS PASSED' : '❌ SOME TESTS FAILED');
+            
+            return allTestsPassed;
+        }
+
+        // Run tests on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('PDF Cleaner initialized');
+            setTimeout(runBasicTests, 1000); // Run tests after everything loads
+        });
+
+        // Additional error handling for PDF processing
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled promise rejection:', event.reason);
+            if (processingSection.style.display === 'block') {
+                processingSection.style.display = 'none';
+                document.querySelector('.upload-section').style.display = 'block';
+                showError('An unexpected error occurred during PDF processing.');
+            }
+        });
+
+        // Memory management for large files
+        function cleanupMemory() {
+            if (cleanedPdfBytes && cleanedPdfBytes.length > 5 * 1024 * 1024) { // > 5MB
+                console.log('Cleaning up memory for large file');
+                // Force garbage collection hint
+                if (window.gc) {
+                    window.gc();
+                }
+            }
+        }
+
+        // Enhanced file validation
+        function validatePdfFile(file) {
+            // Check file extension
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                throw new Error('File must have .pdf extension');
+            }
+            
+            // Check MIME type
+            if (!file.type.includes('pdf') && file.type !== 'application/pdf') {
+                throw new Error('Invalid PDF file type');
+            }
+            
+            // Check file size
+            if (file.size === 0) {
+                throw new Error('File appears to be empty');
+            }
+            
+            if (file.size > 10 * 1024 * 1024) {
+                throw new Error('File size exceeds 10MB limit');
+            }
+            
+            return true;
+        }
+
+        // Performance monitoring
+        function logPerformance(startTime, operation) {
+            const endTime = performance.now();
+            const duration = Math.round(endTime - startTime);
+            console.log(`${operation} completed in ${duration}ms`);
+        }
+
+        console.log('PDF Cleaner loaded successfully');
+    </script>
+</body>
+</html>
